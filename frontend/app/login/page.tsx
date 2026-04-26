@@ -16,10 +16,44 @@ function LoginContent() {
     }
   }, [status, router, searchParams]);
 
+  // Check if running in Electron
+  const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
+
   const handleGoogleLogin = () => {
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
-    window.location.href = `${backendUrl}/auth/google`;
+    
+    // If in Electron, add app_source parameter for deep link
+    const appParam = isElectron ? '?app_source=electron' : '';
+    
+    window.location.href = `${backendUrl}/auth/google${appParam}`;
   };
+
+  // Listen for deep link auth (Electron only)
+  useEffect(() => {
+    if (!isElectron) return;
+
+    const electronAPI = (window as any).electronAPI;
+    if (!electronAPI?.onDeepLinkAuth) return;
+
+    electronAPI.onDeepLinkAuth((data: any) => {
+      console.log('[Login] Received deep link auth:', data);
+      
+      if (data.token) {
+        localStorage.setItem('authToken', data.token);
+        if (data.user) {
+          localStorage.setItem('user', JSON.stringify(data.user));
+          localStorage.setItem('userId', data.user.id);
+        }
+        
+        // Redirect to dashboard
+        router.push('/');
+      }
+    });
+
+    return () => {
+      electronAPI.offDeepLinkAuth?.();
+    };
+  }, [isElectron, router]);
 
   return (
     <div style={styles.container}>
@@ -40,6 +74,12 @@ function LoginContent() {
           </div> */}
           <h1 style={styles.logoText}>Fillica AI</h1>
         </div>
+
+        {isElectron && (
+          <div style={styles.desktopBadge}>
+            🖥️ Desktop Application
+          </div>
+        )}
 
         <p style={styles.subtitle}>
           AI-powered job application automation.
@@ -179,6 +219,18 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 15,
     lineHeight: 1.6,
     marginBottom: 32,
+  },
+  desktopBadge: {
+    display: 'inline-block',
+    background: 'rgba(16, 185, 129, 0.1)',
+    color: 'rgba(16, 185, 129, 0.9)',
+    padding: '6px 12px',
+    borderRadius: 'var(--radius-sm)',
+    fontSize: 12,
+    fontWeight: 600,
+    marginBottom: 16,
+    border: '1px solid rgba(16, 185, 129, 0.3)',
+    whiteSpace: 'nowrap',
   },
   googleBtn: {
     width: '100%',

@@ -1,7 +1,20 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Enable static export for Electron app
+  output: 'export',
+  
+  // Disable image optimization for static export
+  images: {
+    unoptimized: true,
+  },
+  
+  // Use relative paths for static export
+  basePath: '',
+  assetPrefix: '',
+  
+  // Ensure compatibility with Electron
+  trailingSlash: true,
 };
 
 export default nextConfig;

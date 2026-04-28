@@ -1,12 +1,20 @@
 import express from 'express';
 import passport from 'passport';
 import Profile from '../models/profile.js';
+import { generateDeepLinkToken } from '../utils/deepLink.js';
 
 const router = express.Router();
 
 // Start Google OAuth login
 router.get(
   '/google',
+  (req, res, next) => {
+    // Store the original app source in session
+    if (req.query.app_source) {
+      req.session.appSource = req.query.app_source;
+    }
+    next();
+  },
   passport.authenticate('google', { scope: ['profile', 'email'] })
 );
 
@@ -17,7 +25,26 @@ router.get(
     failureRedirect: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login?error=auth_failed`,
   }),
   (req, res) => {
-    res.redirect(process.env.FRONTEND_URL || 'http://localhost:3000');
+    const appSource = req.session.appSource;
+
+    if (appSource === 'electron') {
+      // Generate a JWT token for the electron app
+      const token = generateDeepLinkToken(req.user);
+
+      // Redirect to the deep link with token
+      const deepLinkUrl = `fillica://login-success?token=${encodeURIComponent(token)}&user=${encodeURIComponent(
+        JSON.stringify({
+          id: req.user._id,
+          name: req.user.name,
+          email: req.user.email,
+        })
+      )}`;
+
+      res.redirect(deepLinkUrl);
+    } else {
+      // Normal web redirect
+      res.redirect(process.env.FRONTEND_URL || 'http://localhost:3000');
+    }
   }
 );
 

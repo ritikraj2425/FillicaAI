@@ -61,7 +61,13 @@ export default function HomePage() {
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
 
   useEffect(() => {
-    fetch(`${backendUrl}/jobs`)
+    const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    fetch(`${backendUrl}/jobs`, { headers })
       .then((r) => r.json())
       .then((data) => setJobs(data.jobs || []))
       .catch(() => setJobs([]))
@@ -127,7 +133,7 @@ export default function HomePage() {
       router.push('/profile?setup_required=true');
       return;
     }
-    router.push(`/apply/${job._id}`);
+    router.push(`/apply?id=${job._id}`);
   };
 
   const handleCustomUrlSubmit = async (e: React.FormEvent) => {
@@ -144,14 +150,20 @@ export default function HomePage() {
 
     setCreatingCustomJob(true);
     try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const res = await fetch(`${backendUrl}/jobs/custom`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ url: customUrl })
       });
       if (res.ok) {
         const data = await res.json();
-        router.push(`/apply/${data.job._id}`);
+        router.push(`/apply?id=${data.job._id}`);
       }
     } catch (err) {
       console.error(err);
@@ -316,7 +328,15 @@ export default function HomePage() {
               onApply={() => handleApply(job)}
               onToggleApplied={async () => {
                 try {
-                  const res = await fetch(`${backendUrl}/jobs/${job._id}/toggle-applied`, { method: 'PATCH' });
+                  const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
+                  const headers: Record<string, string> = {};
+                  if (token) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                  }
+                  const res = await fetch(`${backendUrl}/jobs/${job._id}/toggle-applied`, {
+                    method: 'PATCH',
+                    headers
+                  });
                   if (res.ok) {
                     const data = await res.json();
                     setJobs(jobs.map(j => j._id === job._id ? { ...j, applied: data.applied } : j));

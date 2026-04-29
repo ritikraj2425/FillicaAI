@@ -5,10 +5,24 @@ import { contextBridge, ipcRenderer } from 'electron';
  */
 contextBridge.exposeInMainWorld('electronAPI', {
   /**
+   * Open an external URL in the system default browser
+   */
+  openExternal: (url) => {
+    return ipcRenderer.invoke('open-external', url);
+  },
+
+  /**
+   * Start temporary local HTTP server for OAuth callback
+   */
+  startAuthServer: () => {
+    return ipcRenderer.invoke('start-auth-server');
+  },
+
+  /**
    * Start Playwright automation
    */
-  startAgent: (jobId, userId) => {
-    return ipcRenderer.invoke('playwright:start', { jobId, userId });
+  startAgent: (jobId, userId, token, backendUrl) => {
+    return ipcRenderer.invoke('playwright:start', { jobId, userId, token, backendUrl });
   },
 
   /**

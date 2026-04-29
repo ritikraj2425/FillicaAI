@@ -83,7 +83,16 @@ export default function ProfilePage() {
 
   const fetchProfile = async () => {
     try {
-      const res = await fetch(`${backendUrl}/profile`, { credentials: 'include' });
+      const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const res = await fetch(`${backendUrl}/profile`, { 
+        headers,
+        credentials: 'include' 
+      });
       if (res.ok) {
         const data = await res.json();
         setProfile(data.profile);
@@ -125,9 +134,15 @@ export default function ProfilePage() {
     }
     setSavingAi(true);
     try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const res = await fetch(`${backendUrl}/profile/`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ aiConfiguration: aiConfig }),
         credentials: 'include'
       });
@@ -150,9 +165,15 @@ export default function ProfilePage() {
     if (!password || password === '********') return;
     setSavingPassword(true);
     try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const res = await fetch(`${backendUrl}/profile/`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ defaultPassword: password }),
         credentials: 'include'
       });
@@ -172,16 +193,22 @@ export default function ProfilePage() {
   };
 
   const handleUpdateProfile = async (data: any) => {
-    setIsSaving(true);
     try {
       // Clean up skills array — filter empty entries from comma-separated input
       const cleanData = { ...data };
       if (Array.isArray(cleanData.skills)) {
         cleanData.skills = cleanData.skills.filter((s: string) => s && s.trim().length > 0);
       }
+
+      const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const res = await fetch(`${backendUrl}/profile/`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(cleanData),
         credentials: 'include'
       });
@@ -240,8 +267,15 @@ export default function ProfilePage() {
       const endpoint = profile ? `${backendUrl}/profile/resume` : `${backendUrl}/profile/create`;
       const method = profile ? 'PUT' : 'POST';
 
+      const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const res = await fetch(endpoint, {
         method,
+        headers,
         body: formData,
         credentials: 'include',
       });

@@ -3,27 +3,65 @@
  * Handles complete automation flow for job applications
  */
 
-import { chromium } from 'playwright';
-import { callAgentAI, getPageElements, buildContextPrompt, SYSTEM_PROMPT } from './ai.js';
-import { analyzeAndFillPage, clickNextButton, findSubmitButton, submitForm } from './forms.js';
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
-import fetch from 'node-fetch';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { chromium } from 'playwright';
+import { analyzeAndFillPage, clickNextButton, findSubmitButton, injectStatusOverlay } from './forms.js';
 
 dotenv.config({ path: '.env.local' });
 
 // Active browser sessions
 const activeSessions = new Map();
 
+function getOpenPage(session) {
+  if (!session) return null;
+  if (session.page && !session.page.isClosed()) return session.page;
+
+  const fallbackPage = session.context?.pages?.().find((candidate) => !candidate.isClosed());
+  if (fallbackPage) {
+    session.page = fallbackPage;
+    return fallbackPage;
+  }
+
+  return null;
+}
+
+async function attachPageToSession(sessionKey, nextPage) {
+  const session = activeSessions.get(sessionKey);
+  if (!session || !nextPage) return;
+
+  session.page = nextPage;
+
+  nextPage.on('domcontentloaded', async () => {
+    const currentSession = activeSessions.get(sessionKey);
+    if (!currentSession?.lastStatus || nextPage.isClosed()) return;
+    try {
+      await nextPage.waitForTimeout(200);
+      await injectStatusOverlay(nextPage, currentSession.lastStatus.status, currentSession.lastStatus.message);
+    } catch {
+      // Ignore transient navigation races
+    }
+  });
+
+  if (session.lastStatus) {
+    try {
+      await nextPage.waitForTimeout(200);
+      await injectStatusOverlay(nextPage, session.lastStatus.status, session.lastStatus.message);
+    } catch {
+      // Ignore if the new page is still navigating
+    }
+  }
+}
+
 /**
  * Fetch from backend API
  */
-async function fetchFromBackend(endpoint, token) {
-  const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
+async function fetchFromBackend(endpoint, token, backendUrl) {
+  const url = backendUrl || process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
   
-  const response = await fetch(`${backendUrl}${endpoint}`, {
+  const response = await fetch(`${url}${endpoint}`, {
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
@@ -39,6 +77,31 @@ async function fetchFromBackend(endpoint, token) {
   return response.json();
 }
 
+async function sendToBackend(endpoint, method, body, token, backendUrl) {
+  const url = backendUrl || process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
+
+  const response = await fetch(`${url}${endpoint}`, {
+    method,
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: body ? JSON.stringify(body) : undefined,
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Backend error ${response.status}: ${text}`);
+  }
+
+  if (response.status === 204) {
+    return null;
+  }
+
+  return response.json();
+}
+
 /**
  * Emit status to frontend via IPC
  */
@@ -46,6 +109,24 @@ function emitStatus(event, status, message, extras = {}) {
   console.log(`[Status] ${status}: ${message}`);
   if (event && event.sender) {
     event.sender.send('agent_status', { status, message, ...extras });
+  }
+}
+
+async function emitAgentStatus(event, sessionKey, status, message, extras = {}) {
+  emitStatus(event, status, message, extras);
+
+  const session = activeSessions.get(sessionKey);
+  if (!session) return;
+
+  session.lastStatus = { status, message, extras };
+
+  const currentPage = getOpenPage(session);
+  if (currentPage) {
+    try {
+      await injectStatusOverlay(currentPage, status, message);
+    } catch (err) {
+      console.warn('[Overlay] Failed to inject status overlay:', err.message);
+    }
   }
 }
 
@@ -72,19 +153,17 @@ function emitComplete(event, data) {
 /**
  * Download resume to local file
  */
-async function downloadResume(resumeUrl, token) {
+async function downloadResume(resumeUrl) {
   if (!resumeUrl) return null;
 
   try {
-    const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
-    const response = await fetch(`${backendUrl}/profile/resume-url`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+    const fileResponse = await fetch(resumeUrl);
+    
+    if (!fileResponse.ok) {
+      console.warn(`[Resume] Failed to fetch from S3: ${fileResponse.statusText}`);
+      return null;
+    }
 
-    if (!response.ok) return null;
-
-    const { signedUrl } = await response.json();
-    const fileResponse = await fetch(signedUrl);
     const buffer = Buffer.from(await fileResponse.arrayBuffer());
 
     const tempDir = path.join(os.tmpdir(), 'Fillica-resumes');
@@ -106,7 +185,7 @@ async function downloadResume(resumeUrl, token) {
 /**
  * Main automation flow
  */
-export async function handleStartAgent(event, { jobId, userId, token }) {
+export async function handleStartAgent(event, { jobId, userId, token, backendUrl }) {
   if (!jobId || !userId) {
     emitError(event, 'Missing jobId or userId');
     return;
@@ -115,16 +194,23 @@ export async function handleStartAgent(event, { jobId, userId, token }) {
   const sessionKey = `${userId}_${jobId}`;
 
   try {
-    emitStatus(event, 'connecting', 'Fetching your profile and job details...');
+    console.log(`[Agent] Starting automation for Job: ${jobId}, User: ${userId}`);
+    console.log(`[Agent] Token present: ${!!token}, Backend: ${backendUrl}`);
+    if (token) console.log(`[Agent] Token preview: ${token.substring(0, 10)}...`);
+
+    await emitAgentStatus(event, sessionKey, 'connecting', 'Fetching your profile and job details...');
 
     // Fetch data from backend
-    const [profileResp, jobResp] = await Promise.all([
-      fetchFromBackend('/profile', token),
-      fetchFromBackend(`/jobs/${jobId}`, token),
+    const [profileData, jobData] = await Promise.all([
+      fetchFromBackend('/profile', token, backendUrl),
+      fetchFromBackend(`/jobs/${jobId}`, token, backendUrl),
     ]);
 
-    const profile = profileResp;
-    const job = jobResp;
+    const profile = profileData.profile || profileData;
+    const job = jobData.job || jobData;
+    
+    console.log(`[Agent] Profile loaded for: ${profile?.email}`);
+    console.log(`[Agent] Job loaded: ${job?.title} at ${job?.company}`);
 
     if (!profile) {
       emitError(event, 'Profile not found. Please create a profile first.');
@@ -136,7 +222,9 @@ export async function handleStartAgent(event, { jobId, userId, token }) {
       return;
     }
 
-    if (!job.applicationUrl) {
+    const targetUrl = job.applicationUrl || job.url;
+
+    if (!targetUrl) {
       emitError(event, 'This job has no application URL.');
       return;
     }
@@ -147,34 +235,34 @@ export async function handleStartAgent(event, { jobId, userId, token }) {
     }
 
     // Download resume if available
-    emitStatus(event, 'connecting', 'Preparing automation environment...');
+    await emitAgentStatus(event, sessionKey, 'connecting', 'Preparing automation environment...');
     let localResumePath = null;
     if (profile.resumeUrl) {
-      localResumePath = await downloadResume(profile.resumeUrl, token);
+      localResumePath = await downloadResume(profile.resumeUrl);
     }
 
     // Launch browser
-    emitStatus(event, 'initializing', 'Launching browser...');
+    await emitAgentStatus(event, sessionKey, 'initializing', 'Launching browser...');
 
     let browser, context, page;
-    const userDataDir = path.join(os.homedir(), '.Fillica-chrome');
+    browser = await chromium.launch({
+      headless: false,
+      channel: 'chrome',
+      args: ['--start-maximized'],
+    });
+    context = await browser.newContext({
+      viewport: null,
+      acceptDownloads: true,
+    });
 
-    try {
-      context = await chromium.launchPersistentContext(userDataDir, {
-        headless: false,
-        channel: 'chrome',
-        viewport: null,
-        args: ['--start-maximized'],
-      });
-    } catch (err) {
-      console.warn('[Browser] Persistent context failed, using temporary:', err.message);
-      browser = await chromium.launch({ headless: false, channel: 'chrome' });
-      context = await browser.createBrowserContext();
+    const existingPages = context.pages();
+    if (existingPages.length === 1 && existingPages[0].url() === 'about:blank') {
+      page = existingPages[0];
+    } else {
+      page = await context.newPage();
     }
-
-    page = await context.newPage();
     page.setDefaultTimeout(60000);
-    await page.setViewportSize({ width: 1920, height: 1080 });
+    await page.bringToFront().catch(() => {});
 
     // Store session
     activeSessions.set(sessionKey, {
@@ -182,7 +270,26 @@ export async function handleStartAgent(event, { jobId, userId, token }) {
       context,
       page,
       cancelled: false,
-      localResumePath
+      localResumePath,
+      token,
+      backendUrl,
+      lastStatus: { status: 'initializing', message: 'Launching browser...', extras: {} }
+    });
+    await attachPageToSession(sessionKey, page);
+
+    context.on('page', async (newPage) => {
+      const session = activeSessions.get(sessionKey);
+      if (!session) return;
+
+      try {
+        await newPage.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
+        await newPage.bringToFront().catch(() => {});
+      } catch {
+        // Ignore page readiness races
+      }
+
+      await attachPageToSession(sessionKey, newPage);
+      await emitAgentStatus(event, sessionKey, 'navigating', 'Application opened in a new window. Continuing there...');
     });
 
     // Prepare user profile for AI
@@ -206,65 +313,126 @@ export async function handleStartAgent(event, { jobId, userId, token }) {
     };
 
     // Navigate to job application
-    emitStatus(event, 'navigating', `Opening ${job.company} application...`);
-    await page.goto(job.applicationUrl, { 
+    await emitAgentStatus(event, sessionKey, 'navigating', `Opening ${job.company} application...`);
+    await page.goto(targetUrl, { 
       waitUntil: 'domcontentloaded',
       timeout: 60000 
     });
+
+    await emitAgentStatus(event, sessionKey, 'navigating', `Connected to ${job.company} application portal`);
     await page.waitForTimeout(2000);
 
     // Main automation loop
-    const MAX_STEPS = 20;
+    const MAX_STEPS = 50;
     let stepNumber = 0;
+    let requiresManualReview = false;
 
     while (stepNumber < MAX_STEPS) {
       stepNumber++;
 
       // Check if cancelled
       if (!activeSessions.has(sessionKey)) {
-        emitStatus(event, 'cancelled', 'Automation cancelled by user');
+        await emitAgentStatus(event, sessionKey, 'cancelled', 'Automation cancelled by user');
         return;
       }
 
-      emitStatus(event, 'analyzing', `Analyzing page (Step ${stepNumber}/${MAX_STEPS})...`);
+      await emitAgentStatus(event, sessionKey, 'analyzing', `Analyzing page (Step ${stepNumber}/${MAX_STEPS})...`);
 
       try {
+        const sessionBefore = activeSessions.get(sessionKey);
+        page = getOpenPage(sessionBefore) || page;
+        const pageBefore = page;
+        const urlBefore = pageBefore?.url?.() || '';
+        const pageCountBefore = sessionBefore?.context?.pages?.().length || 0;
+
         // Analyze and fill current page
         const result = await analyzeAndFillPage(page, userProfile, profile.aiConfiguration, 
-          (status, msg) => emitStatus(event, status, msg));
+          (status, msg) => emitAgentStatus(event, sessionKey, status, msg));
+
+        const sessionAfter = activeSessions.get(sessionKey);
+        const activePage = getOpenPage(sessionAfter) || page;
+        const urlAfter = activePage?.url?.() || '';
+        const pageCountAfter = sessionAfter?.context?.pages?.().length || 0;
+        const movedToNewPage = activePage !== pageBefore || pageCountAfter > pageCountBefore;
+        const navigatedToDifferentUrl = !!urlAfter && urlAfter !== urlBefore;
+
+        if (result.plan || result.playwrightCode) {
+          await emitAgentStatus(event, sessionKey, 'executing', result.plan || 'Applying actions...', {
+            plan: result.plan,
+            playwright_code: result.playwrightCode,
+          });
+        }
+
+        if (result.navigated || movedToNewPage || navigatedToDifferentUrl) {
+          page = activePage;
+          await emitAgentStatus(event, sessionKey, 'navigating', 'Action changed the page. Continuing on the application form...');
+          await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
+          await page.waitForTimeout(1000);
+          continue;
+        }
 
         // Check if there's a submit button
         if (result.hasSubmitButton) {
-          emitStatus(event, 'executing', 'Preparing to submit application...');
+          await emitAgentStatus(event, sessionKey, 'executing', 'Preparing to submit application...');
           
-          const submitSelector = await findSubmitButton(page);
+          const submitSelector = await findSubmitButton(activePage);
           if (submitSelector) {
-            emitStatus(event, 'review', 'Submit button found. Ready to complete application. Please review the browser window and confirm submission.');
+            requiresManualReview = true;
+            const session = activeSessions.get(sessionKey);
+            if (session) session.keepOpen = true;
+            await emitAgentStatus(event, sessionKey, 'review', 'Submit button found. Ready to complete application. Please review the browser window and confirm submission.');
             break;
           }
         }
 
-        // Try to click next button
-        const hasNext = await clickNextButton(page);
+        if (result.performedAction) {
+          await emitAgentStatus(event, sessionKey, 'analyzing', 'Action applied. Re-checking the current page...');
+          await activePage.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => {});
+          await activePage.waitForTimeout(1000);
+          continue;
+        }
+
+        // Only fall back to a generic next button when the AI did not take any action.
+        const hasNext = await clickNextButton(activePage);
         if (!hasNext) {
-          const submitSelector = await findSubmitButton(page);
+          const submitSelector = await findSubmitButton(activePage);
           if (submitSelector) {
-            emitStatus(event, 'executing', 'Form complete. Ready to submit.');
+            requiresManualReview = true;
+            const session = activeSessions.get(sessionKey);
+            if (session) session.keepOpen = true;
+            await emitAgentStatus(event, sessionKey, 'review', 'Form complete. Ready to submit. Please review the browser window and click Submit there.');
             break;
           }
 
-          emitStatus(event, 'review', 'Page navigation not found. Please review the browser.');
+          requiresManualReview = true;
+          const session = activeSessions.get(sessionKey);
+          if (session) session.keepOpen = true;
+          await emitAgentStatus(event, sessionKey, 'review', 'Page navigation not found. Please review the browser.');
           break;
         }
 
       } catch (err) {
         console.error('[Step Error]', err);
-        emitStatus(event, 'review', `Step ${stepNumber}: ${err.message}`);
+        requiresManualReview = true;
+        const session = activeSessions.get(sessionKey);
+        if (session) session.keepOpen = true;
+        const msg = (err && err.message) ? err.message : String(err);
+        if (msg.toLowerCase().includes('timed out')) {
+          await emitAgentStatus(event, sessionKey, 'review', 'AI timed out on this step. Browser is open; please review and continue manually, then click Mark as Done.');
+        } else {
+          await emitAgentStatus(event, sessionKey, 'review', `Step ${stepNumber}: ${msg}`);
+        }
         break;
       }
     }
 
-    emitStatus(event, 'complete', 'Automation completed. Browser remains open for review.');
+    if (requiresManualReview) {
+      return;
+    }
+
+    const session = activeSessions.get(sessionKey);
+    if (session) session.keepOpen = true;
+    await emitAgentStatus(event, sessionKey, 'completed', 'Automation completed. Browser remains open for review.');
     emitComplete(event, {
       status: 'success',
       jobId,
@@ -278,17 +446,29 @@ export async function handleStartAgent(event, { jobId, userId, token }) {
   } finally {
     setTimeout(() => {
       const session = activeSessions.get(sessionKey);
-      if (session && !session.keepOpen) {
+      if (session) {
         try {
-          session.page?.close().catch(() => {});
-          session.context?.close().catch(() => {});
-          session.browser?.close().catch(() => {});
+          // Clean up downloaded resume
+          if (session.localResumePath) {
+            try {
+              fs.unlinkSync(session.localResumePath);
+              console.log('[Cleanup] Deleted resume:', session.localResumePath);
+            } catch (err) {
+              console.warn('[Cleanup] Could not delete resume:', err.message);
+            }
+          }
+
+          if (!session.keepOpen) {
+            session.page?.close().catch(() => {});
+            session.context?.close().catch(() => {});
+            session.browser?.close().catch(() => {});
+          }
         } catch (err) {
           console.error('[Cleanup]', err);
         }
         activeSessions.delete(sessionKey);
       }
-    }, 30000);
+    }, 600000);
   }
 }
 
@@ -318,7 +498,7 @@ export async function handleCancelAgent(event, { jobId, userId }) {
     }
 
     activeSessions.delete(sessionKey);
-    emitStatus(event, 'cancelled', 'Automation cancelled');
+    await emitAgentStatus(event, sessionKey, 'cancelled', 'Automation cancelled');
 
   } catch (err) {
     console.error('[Cancel] Error:', err);
@@ -329,7 +509,7 @@ export async function handleCancelAgent(event, { jobId, userId }) {
 /**
  * Handle user input
  */
-export async function handleUserSubmit(event, { jobId, userId, userInput }) {
+export async function handleUserSubmit(event, { jobId, userId, userInput, token, backendUrl }) {
   const sessionKey = `${userId}_${jobId}`;
   const session = activeSessions.get(sessionKey);
 
@@ -340,7 +520,44 @@ export async function handleUserSubmit(event, { jobId, userId, userInput }) {
 
   try {
     session.userInput = userInput;
-    emitStatus(event, 'processing', 'Processing user input...');
+    await emitAgentStatus(event, sessionKey, 'executing', 'Finalizing application...');
+
+    const authToken = token || session.token;
+    const resolvedBackendUrl = backendUrl || session.backendUrl;
+
+    if (!authToken) {
+      throw new Error('Authentication token missing while finishing the application.');
+    }
+
+    await sendToBackend(`/jobs/${jobId}/applied`, 'PATCH', { applied: true }, authToken, resolvedBackendUrl);
+
+    if (session.localResumePath && fs.existsSync(session.localResumePath)) {
+      try {
+        fs.unlinkSync(session.localResumePath);
+      } catch (err) {
+        console.warn('[Cleanup] Failed to remove local resume:', err.message);
+      }
+    }
+
+    const currentPage = getOpenPage(session);
+    if (currentPage) {
+      await currentPage.close().catch(() => {});
+    }
+    if (session.context) {
+      await session.context.close().catch(() => {});
+    }
+    if (session.browser) {
+      await session.browser.close().catch(() => {});
+    }
+
+    activeSessions.delete(sessionKey);
+    emitStatus(event, 'completed', 'Form submitted successfully!');
+    emitComplete(event, {
+      status: 'success',
+      jobId,
+      userId,
+      message: 'Form submitted successfully!',
+    });
   } catch (err) {
     console.error('[Submit] Error:', err);
     emitError(event, err.message);

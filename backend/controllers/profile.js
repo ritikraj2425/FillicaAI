@@ -241,14 +241,13 @@ export const createProfile = async (req, res) => {
     const { url } = await uploadFile(resume);
 
     // Parse resume with AI - fetch aiConfig if possible
+    let aiConfig = null;
+    if (req.body.aiConfiguration) {
+      try { aiConfig = JSON.parse(req.body.aiConfiguration); } catch { }
+    }
+
     let extracted;
     try {
-      // If aiConfig is passed in body, use it.
-      let aiConfig = null;
-      if (req.body.aiConfiguration) {
-        try { aiConfig = JSON.parse(req.body.aiConfiguration); } catch { }
-      }
-      
       extracted = await parseResumeWithAI(resume, aiConfig);
     } catch (err) {
       console.error('Failed to parse resume:', err);
@@ -293,12 +292,17 @@ export const getProfile = async (req, res) => {
     
     const profile = profileDoc.toObject();
     
-    // Replace sensitive values with placeholders for frontend detection
-    if (profile.defaultPassword) {
-      profile.defaultPassword = '********';
-    }
-    if (profile.aiConfiguration?.apiKey) {
-      profile.aiConfiguration.apiKey = '********';
+    // Only mask sensitive values for standard web requests (cookie-based).
+    // If a Bearer token is present, it's the Electron agent needing the real values.
+    const isAgent = !!req.headers.authorization;
+
+    if (!isAgent) {
+      if (profile.defaultPassword) {
+        profile.defaultPassword = '********';
+      }
+      if (profile.aiConfiguration?.apiKey) {
+        profile.aiConfiguration.apiKey = '********';
+      }
     }
     
     // Generate signed url

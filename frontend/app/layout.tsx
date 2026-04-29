@@ -3,7 +3,7 @@ import './globals.css';
 import AuthProvider from '@/components/AuthProvider';
 
 export const metadata: Metadata = {
-  title: 'Fillica AI',
+  title: 'Fillica',
   description:
     'AI-powered job application automation. Fill job forms automatically with live browser control and real-time progress tracking.',
 };
@@ -27,7 +27,7 @@ export default function RootLayout({
           </svg>
           <h2 style={{ fontSize: '24px', fontWeight: 600, marginBottom: '16px' }}>Desktop Required</h2>
           <p style={{ color: 'var(--text-secondary)', lineHeight: 1.6, maxWidth: '300px' }}>
-            Fillica AI is a desktop automation engine. It controls a real browser window on your computer to apply for jobs.
+            Fillica is a desktop automation engine. It controls a real browser window on your computer to apply for jobs.
             <br /><br />
             Please open this website on your computer to start using the AI.
           </p>

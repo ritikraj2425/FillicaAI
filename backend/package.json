@@ -1,12 +1,15 @@
 {
-  "name": "job_automation_backend",
+  "name": "fillica-backend",
   "version": "1.0.0",
   "type": "module",
-  "description": "Job application automation backend with Playwright + AI",
+  "description": "Fillica AI — Cloud backend for job application automation",
   "main": "app.js",
   "scripts": {
     "dev": "nodemon app.js",
     "start": "node app.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "keywords": [],
   "author": "",
@@ -17,23 +20,20 @@
     "@aws-sdk/s3-request-presigner": "^3.1032.0",
     "@google/genai": "^1.46.0",
     "bcryptjs": "^3.0.3",
-    "cheerio": "^1.2.0",
     "connect-mongo": "^5.1.0",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "express-session": "^1.18.1",
-    "jsonwebtoken": "^9.1.0",
+    "jsonwebtoken": "^9.0.2",
     "mongoose": "^9.3.2",
     "multer": "^2.1.1",
-    "node-fetch": "^3.3.2",
-    "nodemon": "^3.1.14",
     "openai": "^6.34.0",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
-    "pdf-parse": "^2.4.5",
-    "pdfkit": "^0.18.0",
-    "playwright": "^1.59.1",
-    "socket.io": "^4.8.3"
+    "pdf-parse": "^2.4.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
   }
 }

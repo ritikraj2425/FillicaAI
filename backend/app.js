@@ -18,6 +18,14 @@ import profileRoutes from './routes/profile.js';
 const app = express();
 const port = process.env.PORT || 3001;
 
+// --- Global Error Capture for Vercel Debugging ---
+process.on('uncaughtException', (err) => {
+  console.error('CRITICAL UNCAUGHT EXCEPTION:', err);
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('CRITICAL UNHANDLED REJECTION:', reason);
+});
+
 // --- CORS Configuration ---
 // Allow the deployed frontend, local dev, and Electron desktop app
 const allowedOrigins = [

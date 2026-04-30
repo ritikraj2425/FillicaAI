@@ -22,6 +22,7 @@
     "@google/genai": "^1.50.1",
     "cheerio": "^1.2.0",
     "dotenv": "^16.3.1",
+    "electron-updater": "^6.8.3",
     "openai": "^6.34.0",
     "playwright": "^1.40.0"
   },
@@ -40,9 +41,14 @@
       "buildResources": "assets"
     },
     "files": [
-      "dist/**/*",
+      "out/**/*",
       "frontend/out/**/*"
     ],
+    "publish": {
+      "provider": "github",
+      "owner": "ritikraj2425",
+      "repo": "FillicaAI"
+    },
     "mac": {
       "icon": "frontend/public/logo.png",
       "target": [

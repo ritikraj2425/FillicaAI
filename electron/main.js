@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import http from 'http';
 import { handleCancelAgent, handleStartAgent, handleUserSubmit } from './playwright/agent.js';
+import { autoUpdater } from 'electron-updater';
 
 // Load environment variables from .env.local
 dotenv.config({ path: path.join(path.dirname(fileURLToPath(import.meta.url)), '../.env.local') });
@@ -180,6 +181,25 @@ app.on('ready', () => {
   }
   setupIpcHandlers();
   createWindow();
+
+  // --- Auto-Update (production only) ---
+  if (process.env.NODE_ENV !== 'development') {
+    autoUpdater.logger = console;
+    autoUpdater.autoDownload = true;
+    autoUpdater.autoInstallOnAppQuit = true;
+
+    autoUpdater.on('update-available', (info) => {
+      console.log('[AutoUpdate] Update available:', info.version);
+    });
+    autoUpdater.on('update-downloaded', (info) => {
+      console.log('[AutoUpdate] Update downloaded. Will install on next restart.');
+    });
+    autoUpdater.on('error', (err) => {
+      console.warn('[AutoUpdate] Error:', err.message);
+    });
+
+    autoUpdater.checkForUpdatesAndNotify().catch(() => {});
+  }
 });
 
 app.on('window-all-closed', () => {

@@ -4,7 +4,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import http from 'http';
 import { handleCancelAgent, handleStartAgent, handleUserSubmit } from './playwright/agent.js';
-import { autoUpdater } from 'electron-updater';
+import pkg from 'electron-updater';
+const { autoUpdater } = pkg;
 
 // Load environment variables from .env.local
 dotenv.config({ path: path.join(path.dirname(fileURLToPath(import.meta.url)), '../.env.local') });

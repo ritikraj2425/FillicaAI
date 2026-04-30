@@ -67,13 +67,23 @@ export default function HomePage() {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
+    console.log(`[API Debug] Fetching jobs from: ${backendUrl}/jobs`);
     fetch(`${backendUrl}/jobs`, { 
       headers,
       credentials: token ? 'omit' : 'include'
     })
-      .then((r) => r.json())
-      .then((data) => setJobs(data.jobs || []))
-      .catch(() => setJobs([]))
+      .then((r) => {
+        console.log(`[API Debug] Response status: ${r.status}`);
+        return r.json();
+      })
+      .then((data) => {
+        console.log(`[API Debug] Received ${data.jobs?.length || 0} jobs`);
+        setJobs(data.jobs || []);
+      })
+      .catch((err) => {
+        console.error(`[API Debug] Fetch FAILED:`, err);
+        setJobs([]);
+      })
       .finally(() => setLoading(false));
   }, [backendUrl]);
 
@@ -94,7 +104,7 @@ export default function HomePage() {
           if (
             !job.title.toLowerCase().includes(q) &&
             !job.company.toLowerCase().includes(q) &&
-            !job.tags.some((t) => t.toLowerCase().includes(q))
+            !(job.tags || []).some((t) => t.toLowerCase().includes(q))
           ) return false;
         }
         if (filters.type !== 'All' && job.type !== filters.type) return false;
@@ -438,7 +448,8 @@ function JobCard({ job, isLoggedIn, hasProfile, daysAgo, onClick, onApply, onTog
   }, [showMenu]);
   const isWhite = job.accentBg === '#ffffff';
   const maxTags = 3;
-  const extraCount = Math.max(0, job.tags.length - maxTags);
+  const tagsList = job.tags || [];
+  const extraCount = Math.max(0, tagsList.length - maxTags);
 
   return (
     <div
@@ -499,7 +510,7 @@ function JobCard({ job, isLoggedIn, hasProfile, daysAgo, onClick, onApply, onTog
 
         {/* Tags */}
         <div className="tsenta-tags">
-          {job.tags.slice(0, maxTags).map((tag) => (
+          {tagsList.slice(0, maxTags).map((tag) => (
             <span key={tag} className="tsenta-tag">{tag}</span>
           ))}
           {extraCount > 0 && (
@@ -531,7 +542,7 @@ function JobCard({ job, isLoggedIn, hasProfile, daysAgo, onClick, onApply, onTog
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: 0.5 }}>
               <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" />
             </svg>
-            {job.companyWebsite.length > 18 ? job.companyWebsite.slice(0, 18) + '...' : job.companyWebsite}
+            {job.companyWebsite ? (job.companyWebsite.length > 18 ? job.companyWebsite.slice(0, 18) + '...' : job.companyWebsite) : ''}
           </span>
         </div>
         <div style={{ position: 'relative', marginLeft: 'auto' }}>
@@ -682,7 +693,7 @@ function JobModal({ job, allJobs, isLoggedIn, hasProfile, onClose, onApply }: {
           <div className="modal-section">
             <h3 className="modal-section-title">Skills & Technologies</h3>
             <div className="modal-skill-tags">
-              {job.tags.map((tag) => (
+              {(job.tags || []).map((tag) => (
                 <span key={tag} className="modal-skill-tag">{tag}</span>
               ))}
             </div>

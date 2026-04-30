@@ -83,12 +83,27 @@ function startStaticServer(staticDir) {
       }
     });
 
-    // Listen on random available port on localhost only
-    server.listen(0, '127.0.0.1', () => {
-      const port = server.address().port;
-      console.log(`[Static Server] Serving ${staticDir} on http://127.0.0.1:${port}`);
-      resolve(port);
-    });
+    // Listen on a fixed port so that localStorage persists across app restarts.
+    // If the port is in use, we'll keep trying consecutive ports.
+    const tryListen = (port) => {
+      server.listen(port, '127.0.0.1', () => {
+        console.log(`[Static Server] Serving ${staticDir} on http://127.0.0.1:${port}`);
+        resolve(port);
+      });
+      
+      server.on('error', (e) => {
+        if (e.code === 'EADDRINUSE') {
+          console.log(`[Static Server] Port ${port} in use, trying ${port + 1}...`);
+          server.close();
+          tryListen(port + 1);
+        } else {
+          console.error('[Static Server] Error:', e);
+        }
+      });
+    };
+    
+    // Start trying from a specific uncommon port
+    tryListen(38219);
   });
 }
 
@@ -227,6 +242,13 @@ function createWindow(startUrl) {
 
   console.log('[Main] Loading URL:', startUrl);
   mainWindow.loadURL(startUrl);
+
+  // Enable DevTools shortcut for debugging in production
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if ((input.meta || input.control) && input.alt && input.key.toLowerCase() === 'i') {
+      mainWindow.webContents.openDevTools();
+    }
+  });
 
   // Force all links with target="_blank" (or window.open) to open in the system browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {

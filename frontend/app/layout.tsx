@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import AuthProvider from '@/components/AuthProvider';
+import ErrorBoundary from '@/components/ErrorBoundary';
 
 export const metadata: Metadata = {
   title: 'Fillica',
@@ -17,7 +18,9 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <div id="root-app">
-          <AuthProvider>{children}</AuthProvider>
+          <ErrorBoundary>
+            <AuthProvider>{children}</AuthProvider>
+          </ErrorBoundary>
         </div>
         <div id="mobile-blocker">
           <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" strokeWidth="1.5" style={{ marginBottom: 24 }}>

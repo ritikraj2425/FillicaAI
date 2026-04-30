@@ -1,6 +1,6 @@
 {
   "name": "fillica-desktop",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Fillica AI - Job Application Automation Desktop App",
   "main": "out/main/index.js",
   "homepage": "./",

@@ -46,16 +46,10 @@ function LoginContent() {
     if (!electronAPI?.onDeepLinkAuth) return;
 
     electronAPI.onDeepLinkAuth((data: any) => {
-      console.log('[Login] Received deep link auth:', data);
-
-      if (data.token) {
-        localStorage.setItem('authToken', data.token);
-        if (data.user) {
-          localStorage.setItem('user', JSON.stringify(data.user));
-          localStorage.setItem('userId', data.user.id);
-        }
-
-        // Redirect to dashboard
+      console.log('[Login] Received deep link auth signal');
+      if (data && data.token) {
+        // AuthProvider will handle the token storage and checkAuth()
+        // We just need to trigger the redirect
         router.push('/');
       }
     });

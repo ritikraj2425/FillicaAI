@@ -77,9 +77,18 @@ export default function AuthProvider({
   };
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     checkAuth();
-  }, [pathname]); // Re-check on route change
+
+    // Listen for the login token from Electron's main process
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      (window as any).electronAPI.onDeepLinkAuth((data: any) => {
+        if (data && data.token) {
+          localStorage.setItem('authToken', data.token);
+          checkAuth(); // Update the UI state immediately
+        }
+      });
+    }
+  }, [pathname]);
 
   const logout = async () => {
     try {

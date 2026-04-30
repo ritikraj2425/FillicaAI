@@ -67,21 +67,15 @@ export default function HomePage() {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    console.log(`[API Debug] Fetching jobs from: ${backendUrl}/jobs`);
     fetch(`${backendUrl}/jobs`, { 
       headers,
       credentials: token ? 'omit' : 'include'
     })
-      .then((r) => {
-        console.log(`[API Debug] Response status: ${r.status}`);
-        return r.json();
-      })
+      .then((r) => r.json())
       .then((data) => {
-        console.log(`[API Debug] Received ${data.jobs?.length || 0} jobs`);
         setJobs(data.jobs || []);
       })
       .catch((err) => {
-        console.error(`[API Debug] Fetch FAILED:`, err);
         setJobs([]);
       })
       .finally(() => setLoading(false));

@@ -816,7 +816,7 @@ strong {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.25);
-  z-index: 200;
+  z-index: 2000;
   animation: fadeInOverlay 0.2s ease;
 }
 
@@ -829,7 +829,7 @@ strong {
   max-width: calc(92vw - 28px);
   background: #ffffff;
   box-shadow: -4px 4px 40px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.04);
-  z-index: 201;
+  z-index: 2001;
   display: flex;
   flex-direction: column;
   animation: slideInRight 0.3s ease;

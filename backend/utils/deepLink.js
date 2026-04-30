@@ -12,7 +12,7 @@ export function generateDeepLinkToken(user) {
     },
     process.env.JWT_SECRET || 'your-secret-key',
     {
-      expiresIn: '15m', // Token expires in 15 minutes
+      expiresIn: '7d', // Token expires in 7 days
     }
   );
 

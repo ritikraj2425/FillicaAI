@@ -24,12 +24,35 @@ export default function Navbar({ children }: NavbarProps) {
     <>
       {/* Top Navbar */}
       <header className="top-navbar">
-        {/* Logo */}
-        <div className="nav-logo" onClick={() => router.push('/')}>
-          <div className="nav-logo-icon">
-            <Image src={"/logo.png"} width={18} height={18} alt="Logo" />
+        {/* Logo & Back */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {pathname !== '/' && (
+            <button 
+              onClick={() => router.back()}
+              style={{ 
+                background: 'rgba(0,0,0,0.05)', 
+                border: 'none', 
+                cursor: 'pointer', 
+                width: 32, height: 32,
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--text-secondary)'
+              }}
+              title="Go Back"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
+              </svg>
+            </button>
+          )}
+          <div className="nav-logo" onClick={() => router.push('/')}>
+            <div className="nav-logo-icon">
+              <Image src={"/logo.png"} width={18} height={18} alt="Logo" />
+            </div>
+            <span className="nav-logo-text">Fillica</span>
           </div>
-          <span className="nav-logo-text">Fillica AI</span>
         </div>
 
         {/* Center Nav Tabs */}

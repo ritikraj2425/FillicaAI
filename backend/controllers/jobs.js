@@ -448,3 +448,22 @@ export const toggleAppliedStatus = async (req, res) => {
     return res.status(500).json({ error: err.message });
   }
 };
+
+export const setAppliedStatus = async (req, res) => {
+  try {
+    const job = await Job.findById(req.params.id);
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+
+    if (typeof req.body.applied !== 'boolean') {
+      return res.status(400).json({ error: 'Boolean applied status is required' });
+    }
+
+    job.applied = req.body.applied;
+    await job.save();
+
+    return res.json({ success: true, applied: job.applied });
+  } catch (err) {
+    console.error('Set applied status error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+};

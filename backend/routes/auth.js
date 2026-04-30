@@ -2,6 +2,7 @@ import express from 'express';
 import passport from 'passport';
 import Profile from '../models/profile.js';
 import { generateDeepLinkToken } from '../utils/deepLink.js';
+import { isAuthenticated } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -9,13 +10,15 @@ const router = express.Router();
 router.get(
   '/google',
   (req, res, next) => {
-    // Store the original app source in session
-    if (req.query.app_source) {
-      req.session.appSource = req.query.app_source;
+    let state = 'web';
+    if (req.query.app_source === 'electron') {
+      state = `electron:${req.query.local_port}`;
     }
-    next();
-  },
-  passport.authenticate('google', { scope: ['profile', 'email'] })
+    passport.authenticate('google', { 
+      scope: ['profile', 'email'],
+      state: state
+    })(req, res, next);
+  }
 );
 
 // Google OAuth callback
@@ -25,22 +28,26 @@ router.get(
     failureRedirect: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login?error=auth_failed`,
   }),
   (req, res) => {
-    const appSource = req.session.appSource;
+    const state = req.query.state || '';
 
-    if (appSource === 'electron') {
+    if (state.startsWith('electron:')) {
+      const port = state.split(':')[1];
+      
       // Generate a JWT token for the electron app
       const token = generateDeepLinkToken(req.user);
 
-      // Redirect to the deep link with token
-      const deepLinkUrl = `fillica://login-success?token=${encodeURIComponent(token)}&user=${encodeURIComponent(
+      const userStr = encodeURIComponent(
         JSON.stringify({
           id: req.user._id,
           name: req.user.name,
           email: req.user.email,
         })
-      )}`;
+      );
+      
+      const localUrl = `http://127.0.0.1:${port}/login-success?token=${encodeURIComponent(token)}&user=${userStr}`;
 
-      res.redirect(deepLinkUrl);
+      // Redirect directly to the local HTTP server running inside Electron
+      res.redirect(localUrl);
     } else {
       // Normal web redirect
       res.redirect(process.env.FRONTEND_URL || 'http://localhost:3000');
@@ -49,8 +56,8 @@ router.get(
 );
 
 // Get current authenticated user
-router.get('/me', async (req, res) => {
-  if (req.isAuthenticated && req.isAuthenticated()) {
+router.get('/me', isAuthenticated, async (req, res) => {
+  if (req.user) {
     try {
       const profile = await Profile.findOne({ userId: req.user._id });
       return res.json({

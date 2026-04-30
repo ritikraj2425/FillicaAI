@@ -1,6 +1,7 @@
 'use client';
 
 import { useSession } from '@/components/AuthProvider';
+import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, Suspense } from 'react';
 
@@ -17,15 +18,24 @@ function LoginContent() {
   }, [status, router, searchParams]);
 
   // Check if running in Electron
-  const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
+  const isElectron = typeof window !== 'undefined' &&
+    (navigator.userAgent.toLowerCase().includes('electron') || !!(window as any).electronAPI);
 
-  const handleGoogleLogin = () => {
+  const handleGoogleLogin = async () => {
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
-    
-    // If in Electron, add app_source parameter for deep link
-    const appParam = isElectron ? '?app_source=electron' : '';
-    
-    window.location.href = `${backendUrl}/auth/google${appParam}`;
+
+    if (isElectron) {
+      try {
+        const electronAPI = (window as any).electronAPI;
+        const port = await electronAPI.startAuthServer();
+        const authUrl = `${backendUrl}/auth/google?app_source=electron&local_port=${port}`;
+        window.open(authUrl, '_blank');
+      } catch (e) {
+        console.error("Failed to start auth server", e);
+      }
+    } else {
+      window.location.href = `${backendUrl}/auth/google`;
+    }
   };
 
   // Listen for deep link auth (Electron only)
@@ -37,14 +47,14 @@ function LoginContent() {
 
     electronAPI.onDeepLinkAuth((data: any) => {
       console.log('[Login] Received deep link auth:', data);
-      
+
       if (data.token) {
         localStorage.setItem('authToken', data.token);
         if (data.user) {
           localStorage.setItem('user', JSON.stringify(data.user));
           localStorage.setItem('userId', data.user.id);
         }
-        
+
         // Redirect to dashboard
         router.push('/');
       }
@@ -65,19 +75,13 @@ function LoginContent() {
       <div style={styles.card} className="animate-slide-up">
         {/* Logo */}
         <div style={styles.logoContainer}>
-          {/* <div style={styles.logoIcon}>
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2L2 7l10 5 10-5-10-5z" />
-              <path d="M2 17l10 5 10-5" />
-              <path d="M2 12l10 5 10-5" />
-            </svg>
-          </div> */}
-          <h1 style={styles.logoText}>Fillica AI</h1>
+          <Image src="/logo.png" width={52} height={52} alt="Fillica logo" />
+          <h1 style={styles.logoText}>Fillica</h1>
         </div>
 
         {isElectron && (
           <div style={styles.desktopBadge}>
-            🖥️ Desktop Application
+            Desktop Application
           </div>
         )}
 
@@ -108,7 +112,7 @@ function LoginContent() {
         </div>
 
         <p style={styles.footer}>
-          By signing in, you agree to let Fillica AI assist with your job applications.
+          By signing in, you agree to let Fillica assist with your job applications.
           Your data is stored securely and never shared.
         </p>
       </div>

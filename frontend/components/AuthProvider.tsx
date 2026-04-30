@@ -49,7 +49,17 @@ export default function AuthProvider({
   const checkAuth = async () => {
     try {
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
-      const res = await fetch(`${backendUrl}/auth/me`, { credentials: 'include' });
+      const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
+      
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const res = await fetch(`${backendUrl}/auth/me`, { 
+        headers,
+        credentials: 'include' 
+      });
       
       if (res.ok) {
         const data = await res.json();
@@ -77,6 +87,11 @@ export default function AuthProvider({
         method: 'POST',
         credentials: 'include' 
       });
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('user');
+        localStorage.removeItem('userId');
+      }
       setUser(null);
       setStatus('unauthenticated');
       router.push('/login');

@@ -13,7 +13,7 @@ dotenv.config({ path: path.join(path.dirname(fileURLToPath(import.meta.url)), '.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const appIconPath = process.env.NODE_ENV === 'development'
   ? path.join(__dirname, '../../frontend/public/logo.png')
-  : path.join(__dirname, '../frontend/out/logo.png');
+  : path.join(__dirname, '../../frontend/out/logo.png');
 
 let mainWindow;
 
@@ -151,7 +151,7 @@ function createWindow() {
   // Load the Next.js static export or dev server
   const startUrl = process.env.NODE_ENV === 'development'
     ? 'http://localhost:3000'
-    : `file://${path.join(__dirname, '../frontend/out/index.html')}`;
+    : `file://${path.join(__dirname, '../../frontend/out/index.html')}`;
 
   mainWindow.loadURL(startUrl);
 

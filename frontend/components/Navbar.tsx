@@ -15,6 +15,25 @@ export default function Navbar({ children }: NavbarProps) {
   const router = useRouter();
   const pathname = usePathname();
 
+  const isElectron = typeof window !== 'undefined' && 
+    (navigator.userAgent.toLowerCase().includes('electron') || !!(window as any).electronAPI);
+
+  const navigate = (href: string) => {
+    if (isElectron && window.location.protocol === 'file:') {
+      // In Electron static export, absolute router paths often fail.
+      // We navigate to the specific HTML file using relative paths.
+      const isRoot = pathname === '/' || pathname === '/index.html';
+      if (href === '/') {
+        window.location.href = isRoot ? './index.html' : '../index.html';
+      } else {
+        const cleanHref = href.startsWith('/') ? href.slice(1) : href;
+        window.location.href = isRoot ? `./${cleanHref}/index.html` : `../${cleanHref}/index.html`;
+      }
+    } else {
+      router.push(href);
+    }
+  };
+
   const navTabs = [
     { href: '/', label: 'Dashboard' },
     { href: '/profile', label: 'My Profile' },
@@ -47,7 +66,7 @@ export default function Navbar({ children }: NavbarProps) {
               </svg>
             </button>
           )}
-          <div className="nav-logo" onClick={() => router.push('/')}>
+          <div className="nav-logo" onClick={() => navigate('/')}>
             <div className="nav-logo-icon">
               <Image src={"/logo.png"} width={18} height={18} alt="Logo" />
             </div>
@@ -61,7 +80,7 @@ export default function Navbar({ children }: NavbarProps) {
             <button
               key={tab.href}
               className={`nav-tab ${pathname === tab.href ? 'active' : ''}`}
-              onClick={() => router.push(tab.href)}
+              onClick={() => navigate(tab.href)}
             >
               {tab.label}
             </button>
@@ -89,7 +108,7 @@ export default function Navbar({ children }: NavbarProps) {
           ) : status === 'unauthenticated' ? (
             <button
               className="nav-signin-btn"
-              onClick={() => router.push('/login')}
+              onClick={() => navigate('/login')}
             >
               Sign In
             </button>

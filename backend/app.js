@@ -30,16 +30,25 @@ process.on('unhandledRejection', (reason, promise) => {
 // --- CORS Configuration ---
 // Allow the deployed frontend, local dev, and Electron desktop app
 const allowedOrigins = [
-  process.env.FRONTEND_URL || 'http://localhost:3000',
-  'http://localhost:3000', // Local development
-  'file://', // Electron desktop app
-];
+  process.env.FRONTEND_URL,
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'file://',
+  'null', // Electron often sends "null" origin for file://
+].filter(Boolean);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, curl, or Electron)
-      if (!origin || allowedOrigins.some(allowed => origin.startsWith(allowed))) {
+      // Allow requests with no origin (like mobile apps or curl)
+      if (!origin) return callback(null, true);
+      
+      const isAllowed = allowedOrigins.some(allowed => 
+        origin === allowed || origin.startsWith(allowed)
+      );
+
+      if (isAllowed) {
+        // Reflect the origin back to the client to satisfy "Access-Control-Allow-Credentials"
         callback(null, true);
       } else {
         console.warn(`[CORS] Blocked origin: ${origin}`);

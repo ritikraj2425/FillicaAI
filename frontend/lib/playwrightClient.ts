@@ -46,12 +46,12 @@ class PlaywrightClient {
   /**
    * Start Playwright automation
    */
-  async startAutomation(jobId: string, userId: string): Promise<void> {
+  async startAutomation(jobId: string, userId: string, token: string, backendUrl: string): Promise<void> {
     const electronAPI = (window as any).electronAPI;
     if (!electronAPI) {
       throw new Error('Not running in Electron');
     }
-    return electronAPI.startAgent(jobId, userId);
+    return electronAPI.startAgent(jobId, userId, token, backendUrl);
   }
 
   /**

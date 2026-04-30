@@ -77,7 +77,10 @@ app.use(passport.session());
 
 // --- Connect to MongoDB ---
 // Cache the promise so Vercel doesn't reconnect on every cold start
-let dbReady = connectDB();
+let dbReady = connectDB().catch(err => {
+  console.error("CRITICAL: MongoDB failed to connect on boot:", err.message);
+  // Do not throw here, otherwise it causes UnhandledPromiseRejection and crashes the Vercel function
+});
 
 // --- Routes ---
 app.get('/', (req, res) => {

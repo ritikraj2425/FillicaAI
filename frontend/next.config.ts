@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
   
   // Use relative paths for static export
   basePath: '',
-  assetPrefix: '',
+  assetPrefix: process.env.NODE_ENV === 'production' ? './' : '',
   
   // Ensure compatibility with Electron
   trailingSlash: true,

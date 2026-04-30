@@ -10,7 +10,11 @@ const connectDB = async () => {
     console.log('MongoDB connected successfully.');
   } catch (err) {
     console.error('MongoDB connection failed:', err.message);
-    process.exit(1);
+    // In serverless (Vercel), process.exit(1) causes FUNCTION_INVOCATION_FAILED.
+    if (!process.env.VERCEL) {
+      process.exit(1);
+    }
+    throw err;
   }
 };
 

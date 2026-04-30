@@ -46,16 +46,21 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // --- Session Configuration ---
-// MongoStore persists sessions to MongoDB — works perfectly in Vercel serverless
+// MongoStore requires a valid URL. If missing (e.g. forgot env vars), fallback to memory to prevent crash, but log error.
+const sessionStore = process.env.MONGO_URL 
+  ? MongoStore.create({ mongoUrl: process.env.MONGO_URL, collectionName: 'sessions' })
+  : undefined;
+
+if (!process.env.MONGO_URL) {
+  console.error('CRITICAL: MONGO_URL is missing. Sessions will not persist and app will fail.');
+}
+
 app.use(
   session({
     secret: process.env.SESSION_SECRET || 'job-automation-secret-key',
     resave: false,
     saveUninitialized: false,
-    store: MongoStore.create({
-      mongoUrl: process.env.MONGO_URL,
-      collectionName: 'sessions',
-    }),
+    store: sessionStore,
     cookie: {
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
       httpOnly: true,
@@ -101,8 +106,12 @@ if (!process.env.VERCEL) {
       console.log(`Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
     });
   }).catch((err) => {
-    console.error('Failed to start server:', err);
-    process.exit(1);
+    console.error('MongoDB connection failed:', err.message);
+    // In serverless (Vercel), we don't want to process.exit(1) as it crashes the invocation
+    if (!process.env.VERCEL) {
+      process.exit(1);
+    }
+    throw err;
   });
 }
 

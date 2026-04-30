@@ -128,30 +128,15 @@ export default function HomePage() {
   };
 
   const handleApply = (job: Job) => {
-    const isElectron = typeof window !== 'undefined' && 
-      (navigator.userAgent.toLowerCase().includes('electron') || !!(window as any).electronAPI);
-
     if (!isLoggedIn) {
-      if (isElectron && window.location.protocol === 'file:') {
-        window.location.href = './login/index.html';
-      } else {
-        router.push('/login?redirect=/');
-      }
+      router.push('/login?redirect=/');
       return;
     }
     if (!hasProfile) {
-      if (isElectron && window.location.protocol === 'file:') {
-        window.location.href = './profile/index.html?setup_required=true';
-      } else {
-        router.push('/profile?setup_required=true');
-      }
+      router.push('/profile?setup_required=true');
       return;
     }
-    if (isElectron && window.location.protocol === 'file:') {
-      window.location.href = `./apply/index.html?id=${job._id}`;
-    } else {
-      router.push(`/apply?id=${job._id}`);
-    }
+    router.push(`/apply?id=${job._id}`);
   };
 
   const handleCustomUrlSubmit = async (e: React.FormEvent) => {

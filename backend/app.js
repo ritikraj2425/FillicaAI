@@ -32,9 +32,10 @@ process.on('unhandledRejection', (reason, promise) => {
 const allowedOrigins = [
   process.env.FRONTEND_URL,
   'http://localhost:3000',
-  'http://127.0.0.1:3000',
+  'http://localhost',       // Electron local static server (any port)
+  'http://127.0.0.1',      // Electron local static server (any port)
   'file://',
-  'null', // Electron often sends "null" origin for file://
+  'null', // Electron sometimes sends "null" origin for file://
 ].filter(Boolean);
 
 app.use(

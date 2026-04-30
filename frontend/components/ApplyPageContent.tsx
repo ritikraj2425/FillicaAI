@@ -80,21 +80,9 @@ export default function ApplyPageContent({ jobId }: ApplyPageContentProps) {
 
   const isElectron = typeof window !== 'undefined' && !!(window as ElectronWindow).electronAPI;
 
-  const navigate = (href: string) => {
-    if (isElectron && window.location.protocol === 'file:') {
-      if (href === '/') {
-        window.location.href = '../index.html';
-      } else if (href.startsWith('/login')) {
-        window.location.href = '../login/index.html';
-      }
-    } else {
-      router.push(href);
-    }
-  };
-
   useEffect(() => {
     if (status === 'unauthenticated') {
-      navigate('/login?redirect=/');
+      router.push('/login?redirect=/');
       return;
     }
     if (!jobId) return;
@@ -231,7 +219,7 @@ export default function ApplyPageContent({ jobId }: ApplyPageContentProps) {
       <Navbar>
         <div style={{ textAlign: 'center', padding: 80 }}>
           <p>Missing application id</p>
-          <button className="btn btn-secondary" onClick={() => navigate('/')}>Back to Jobs</button>
+          <button className="btn btn-secondary" onClick={() => router.push('/')}>Back to Jobs</button>
         </div>
       </Navbar>
     );
@@ -253,7 +241,7 @@ export default function ApplyPageContent({ jobId }: ApplyPageContentProps) {
       <Navbar>
         <div style={{ textAlign: 'center', padding: 80 }}>
           <p>{jobId ? 'Job not found' : 'Missing application id'}</p>
-          <button className="btn btn-secondary" onClick={() => navigate('/')}>Back to Jobs</button>
+          <button className="btn btn-secondary" onClick={() => router.push('/')}>Back to Jobs</button>
         </div>
       </Navbar>
     );
@@ -269,7 +257,7 @@ export default function ApplyPageContent({ jobId }: ApplyPageContentProps) {
           <div className="agent-header">
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
               <button
-                onClick={() => navigate('/')}
+                onClick={() => router.push('/')}
                 style={{
                   background: 'none',
                   border: 'none',
@@ -384,7 +372,7 @@ export default function ApplyPageContent({ jobId }: ApplyPageContentProps) {
 
             {agentStatus === 'failed' && (
               <div style={{ display: 'flex', gap: 12, width: '100%' }}>
-                <button className="btn btn-secondary" style={{ flex: 1, height: 44 }} onClick={() => navigate('/')}>
+                <button className="btn btn-secondary" style={{ flex: 1, height: 44 }} onClick={() => router.push('/')}>
                   Exit
                 </button>
                 <button className="btn btn-primary" style={{ flex: 1, height: 44 }} onClick={handleStart}>
@@ -394,7 +382,7 @@ export default function ApplyPageContent({ jobId }: ApplyPageContentProps) {
             )}
 
             {['completed', 'cancelled'].includes(agentStatus) && (
-              <button className="btn btn-secondary" style={{ width: '100%', height: 44 }} onClick={() => navigate('/')}>
+              <button className="btn btn-secondary" style={{ width: '100%', height: 44 }} onClick={() => router.push('/')}>
                 Back to Dashboard
               </button>
             )}

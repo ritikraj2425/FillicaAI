@@ -9,9 +9,8 @@ const nextConfig: NextConfig = {
     unoptimized: true,
   },
   
-  // Use relative paths for static export
+  // Use relative paths for static export (needed for local HTTP server)
   basePath: '',
-  assetPrefix: process.env.NODE_ENV === 'production' ? './' : '',
   
   // Ensure compatibility with Electron
   trailingSlash: true,

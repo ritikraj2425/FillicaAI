@@ -56,13 +56,9 @@ export default function AuthProvider({
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      // In Electron/file:// protocol, we use Bearer tokens instead of Cookies to avoid CORS/SameSite issues
-      const isElectron = typeof window !== 'undefined' && 
-        (navigator.userAgent.toLowerCase().includes('electron') || !!(window as any).electronAPI);
-
       const res = await fetch(`${backendUrl}/auth/me`, { 
         headers,
-        credentials: token || isElectron ? 'omit' : 'include' 
+        credentials: token ? 'omit' : 'include' 
       });
       
       if (res.ok) {
@@ -111,16 +107,7 @@ export default function AuthProvider({
       (route) => pathname === route || pathname.startsWith('/login')
     );
     if (status === 'unauthenticated' && !isPublic) {
-      const isElectron = typeof window !== 'undefined' && 
-        (navigator.userAgent.toLowerCase().includes('electron') || !!(window as any).electronAPI);
-      
-      if (isElectron && window.location.protocol === 'file:') {
-        // On file:// protocol, absolute redirects like /login often fail.
-        // We use a relative path to the exported static files.
-        window.location.href = './login/index.html';
-      } else {
-        router.push(`/login?redirect=${encodeURIComponent(pathname)}`);
-      }
+      router.push(`/login?redirect=${encodeURIComponent(pathname)}`);
     }
   }, [status, pathname, router]);
 

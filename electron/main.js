@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import { app, BrowserWindow, ipcMain, protocol, shell } from 'electron';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import http from 'http';
 import { handleCancelAgent, handleStartAgent, handleUserSubmit } from './playwright/agent.js';
@@ -14,6 +15,82 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const appIconPath = process.env.NODE_ENV === 'development'
   ? path.join(__dirname, '../../frontend/public/logo.png')
   : path.join(__dirname, '../../frontend/out/logo.png');
+
+// MIME type map for the local static server
+const MIME_TYPES = {
+  '.html': 'text/html',
+  '.js': 'application/javascript',
+  '.css': 'text/css',
+  '.json': 'application/json',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.txt': 'text/plain',
+  '.map': 'application/json',
+};
+
+/**
+ * Start a local static file server for the Next.js export.
+ * This eliminates ALL file:// protocol issues (broken paths, CORS, cookies).
+ */
+function startStaticServer(staticDir) {
+  return new Promise((resolve) => {
+    const server = http.createServer((req, res) => {
+      // Strip query strings and hash
+      let urlPath = req.url.split('?')[0].split('#')[0];
+      
+      // Decode URI components
+      urlPath = decodeURIComponent(urlPath);
+      
+      // Map URL path to file path
+      let filePath = path.join(staticDir, urlPath);
+      
+      // If directory, try index.html
+      if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
+        filePath = path.join(filePath, 'index.html');
+      }
+      
+      // If no extension and file doesn't exist, try adding .html or /index.html
+      if (!path.extname(filePath) && !fs.existsSync(filePath)) {
+        if (fs.existsSync(filePath + '.html')) {
+          filePath = filePath + '.html';
+        } else if (fs.existsSync(path.join(filePath, 'index.html'))) {
+          filePath = path.join(filePath, 'index.html');
+        }
+      }
+      
+      // If file still doesn't exist, serve index.html for SPA-like navigation
+      if (!fs.existsSync(filePath)) {
+        filePath = path.join(staticDir, 'index.html');
+      }
+
+      const ext = path.extname(filePath).toLowerCase();
+      const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+
+      try {
+        const content = fs.readFileSync(filePath);
+        res.writeHead(200, { 'Content-Type': contentType });
+        res.end(content);
+      } catch (err) {
+        res.writeHead(500);
+        res.end('Internal Server Error');
+      }
+    });
+
+    // Listen on random available port on localhost only
+    server.listen(0, '127.0.0.1', () => {
+      const port = server.address().port;
+      console.log(`[Static Server] Serving ${staticDir} on http://127.0.0.1:${port}`);
+      resolve(port);
+    });
+  });
+}
 
 let mainWindow;
 
@@ -130,7 +207,7 @@ function setupIpcHandlers() {
 /**
  * Create the main Electron window
  */
-function createWindow() {
+function createWindow(startUrl) {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -148,11 +225,7 @@ function createWindow() {
     },
   });
 
-  // Load the Next.js static export or dev server
-  const startUrl = process.env.NODE_ENV === 'development'
-    ? 'http://localhost:3000'
-    : `file://${path.join(__dirname, '../../frontend/out/index.html')}`;
-
+  console.log('[Main] Loading URL:', startUrl);
   mainWindow.loadURL(startUrl);
 
   // Force all links with target="_blank" (or window.open) to open in the system browser
@@ -172,16 +245,31 @@ function createWindow() {
   });
 }
 
+// Store the start URL so 'activate' can reuse it
+let appStartUrl = null;
+
 /**
  * App ready
  */
-app.on('ready', () => {
+app.on('ready', async () => {
   app.setName('Fillica');
   if (process.platform === 'darwin' && app.dock) {
     app.dock.setIcon(appIconPath);
   }
   setupIpcHandlers();
-  createWindow();
+
+  // Determine the start URL
+  if (process.env.NODE_ENV === 'development') {
+    appStartUrl = 'http://localhost:3000';
+  } else {
+    // Start a local static server to serve the Next.js export
+    // This eliminates ALL file:// protocol issues (broken paths, CORS, missing CSS)
+    const staticDir = path.join(__dirname, '../../frontend/out');
+    const port = await startStaticServer(staticDir);
+    appStartUrl = `http://127.0.0.1:${port}`;
+  }
+
+  createWindow(appStartUrl);
 
   // --- Auto-Update (production only) ---
   if (process.env.NODE_ENV !== 'development') {
@@ -210,7 +298,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('activate', () => {
-  if (mainWindow === null) {
-    createWindow();
+  if (mainWindow === null && appStartUrl) {
+    createWindow(appStartUrl);
   }
 });

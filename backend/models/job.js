@@ -19,6 +19,7 @@ const jobSchema = new mongoose.Schema({
   accentBg: { type: String, default: '#ffffff' },
   accentText: { type: String, default: '#374151' },
   applied: { type: Boolean, default: false },
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   postedAt: { type: Date, default: Date.now },
 }, { timestamps: true });
 

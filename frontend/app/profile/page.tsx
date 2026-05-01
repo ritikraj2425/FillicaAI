@@ -152,10 +152,21 @@ export default function ProfilePage() {
         setIsEditingAi(false);
       } else {
         const data = await res.json();
-        setMessage({ text: data.error || 'Failed to save AI configuration', type: 'error' });
+        let errorMsg = data.error || 'Failed to save AI configuration';
+        
+        // Human-readable error mapping
+        if (errorMsg.includes('403')) {
+          errorMsg = 'Your API key was rejected (403). This usually means the key is invalid or has been revoked. Please generate a new one from your provider console.';
+        } else if (errorMsg.includes('429')) {
+          errorMsg = 'Rate limit exceeded (429). The free tier has limited requests per minute. Please wait a moment or try a different API key.';
+        } else if (errorMsg.includes('API key not found')) {
+          errorMsg = 'AI Configuration Error: Please check your API key and try again.';
+        }
+        
+        setMessage({ text: errorMsg, type: 'error' });
       }
     } catch (err) {
-      setMessage({ text: 'Failed to save AI configuration', type: 'error' });
+      setMessage({ text: 'Could not reach the AI service. Check your internet connection.', type: 'error' });
     } finally {
       setSavingAi(false);
     }
@@ -302,9 +313,35 @@ export default function ProfilePage() {
         <h1 style={{ fontSize: 32, fontWeight: 300, marginBottom: 8, color: 'var(--text-primary)', letterSpacing: '-0.3px' }}>
           Your Profile
         </h1>
-        <p style={{ color: 'var(--text-secondary)', marginBottom: 32, fontSize: 16, maxWidth: 600 }}>
+        <p style={{ color: 'var(--text-secondary)', marginBottom: 24, fontSize: 16, maxWidth: 600 }}>
           Your profile acts as your master application profile, powered by AI to automatically match and apply to roles perfectly suited for your background.
         </p>
+
+        {/* Global Guidance Banner */}
+        <div style={{
+          background: 'rgba(13, 148, 136, 0.1)',
+          border: '1px solid rgba(13, 148, 136, 0.2)',
+          borderRadius: 16,
+          padding: '20px',
+          marginBottom: 32,
+          display: 'flex',
+          gap: 16,
+          alignItems: 'flex-start'
+        }}>
+          <div style={{ color: '#0d9488', marginTop: 2 }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+          </div>
+          <div>
+            <h4 style={{ margin: '0 0 4px 0', fontSize: '0.95rem', fontWeight: 600, color: '#0d9488' }}>Optimize Your Results</h4>
+            <p style={{ margin: 0, fontSize: '0.875rem', color: '#334155', lineHeight: 1.5 }}>
+              Fill in as many fields as possible. The AI agent uses your skills, work experience, demographics, and work authorization to fill job applications accurately. Missing information may cause the automation to pause or fail.
+            </p>
+          </div>
+        </div>
 
         {profile && (
           <div style={{
@@ -348,6 +385,25 @@ export default function ProfilePage() {
             )}
           </div>
           <div className="tsenta-card-body" style={{ padding: '20px', minHeight: 'auto' }}>
+            {isEditingAi && (
+              <div style={{ 
+                background: 'rgba(255, 255, 255, 0.5)', 
+                border: '1px dashed #cbd5e1', 
+                borderRadius: '12px', 
+                padding: '16px', 
+                marginBottom: '20px',
+                fontSize: '0.85rem',
+                color: '#475569',
+                lineHeight: 1.5
+              }}>
+                <p style={{ margin: 0 }}>
+                  <strong>How to get a key:</strong> You need your own AI API key. We recommend <strong>Google Gemini</strong> (free tier available). 
+                  Get your key from <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" style={{ color: '#0d9488', fontWeight: 600 }}>Google AI Studio</a>. 
+                  <br /><br />
+                  <span style={{ fontSize: '0.75rem' }}>Note: Free tier keys can fail or hit limits (429) frequently. If you have a Google Cloud Project with billing enabled, generating a key from there usually provides higher reliability.</span>
+                </p>
+              </div>
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
               <div>
                 <label style={{ fontSize: '0.875rem', fontWeight: 500, color: '#94a3b8', marginBottom: '8px', display: 'block' }}>AI Provider</label>
@@ -612,8 +668,12 @@ export default function ProfilePage() {
                   <h3 className="modal-section-title" style={{ marginBottom: 4 }}>
                     Automation Login Credentials
                   </h3>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 0 }}>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 8 }}>
                     Provide a default password so the AI can automatically sign in or register on job portals.
+                  </p>
+                  <p style={{ color: '#64748b', fontSize: '0.75rem', lineHeight: 1.4, maxWidth: 500 }}>
+                    <strong>Note:</strong> This password is used by the automation agent to log into job portals (Workday, Greenhouse, etc.). 
+                    Set a <strong>unique, dedicated password</strong> for job portals — do NOT use your personal email password.
                   </p>
                   {message && (message.text.toLowerCase().includes('credential') || message.text.toLowerCase().includes('password')) && (
                     <div

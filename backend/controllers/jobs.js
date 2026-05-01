@@ -1,4 +1,5 @@
 import Job from '../models/job.js';
+import UserJobStatus from '../models/userJobStatus.js';
 
 const daysAgo = (n) => new Date(Date.now() - n * 24 * 60 * 60 * 1000);
 
@@ -338,7 +339,7 @@ const SEED_DATA = [
 ];
 
 async function seedJobsInternal() {
-  await Job.deleteMany({});
+  await Job.deleteMany({ category: { $ne: 'Custom' } });
   const jobsWithAccents = SEED_DATA.map(job => {
     const accent = getRandomAccent();
     return {
@@ -352,15 +353,48 @@ async function seedJobsInternal() {
 
 export const getJobs = async (req, res) => {
   try {
-    let jobs = await Job.find().sort({ postedAt: -1 });
+    const userId = req.user?._id || req.user?.id || null;
+
+    // Fetch all non-custom jobs
+    let jobs = await Job.find({ category: { $ne: 'Custom' } }).sort({ postedAt: -1 });
 
     // Auto-seed if empty
     if (jobs.length === 0) {
       await seedJobsInternal();
-      jobs = await Job.find().sort({ postedAt: -1 });
+      jobs = await Job.find({ category: { $ne: 'Custom' } }).sort({ postedAt: -1 });
     }
 
-    return res.json({ jobs, total: jobs.length });
+    // Fetch this user's custom jobs (only theirs)
+    let userCustomJobs = [];
+    if (userId) {
+      userCustomJobs = await Job.find({ category: 'Custom', createdBy: userId }).sort({ postedAt: -1 });
+    }
+
+    const allJobs = [...jobs, ...userCustomJobs];
+
+    // Merge per-user applied status
+    if (userId) {
+      const jobIds = allJobs.map(j => j._id);
+      const statuses = await UserJobStatus.find({ userId, jobId: { $in: jobIds } });
+      const statusMap = new Map(statuses.map(s => [s.jobId.toString(), s.applied]));
+
+      const jobsWithStatus = allJobs.map(j => {
+        const jobObj = j.toObject();
+        jobObj.applied = statusMap.get(j._id.toString()) || false;
+        return jobObj;
+      });
+
+      return res.json({ jobs: jobsWithStatus, total: jobsWithStatus.length });
+    }
+
+    // Not logged in — return jobs without applied status
+    const jobsPlain = allJobs.map(j => {
+      const jobObj = j.toObject();
+      jobObj.applied = false;
+      return jobObj;
+    });
+
+    return res.json({ jobs: jobsPlain, total: jobsPlain.length });
   } catch (err) {
     console.error('Get jobs error:', err);
     return res.status(500).json({ error: err.message });
@@ -392,6 +426,7 @@ export const seedJobs = async (req, res) => {
 
 export const createCustomJob = async (req, res) => {
   try {
+    const userId = req.user?._id || req.user?.id || null;
     const { url } = req.body;
     if (!url) {
       return res.status(400).json({ error: 'URL is required' });
@@ -424,6 +459,7 @@ export const createCustomJob = async (req, res) => {
       matchPercent: 100,
       accentBg: accent.bg,
       accentText: accent.text,
+      createdBy: userId,
       postedAt: new Date()
     });
 
@@ -436,13 +472,23 @@ export const createCustomJob = async (req, res) => {
 
 export const toggleAppliedStatus = async (req, res) => {
   try {
+    const userId = req.user?._id || req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Login required' });
+
     const job = await Job.findById(req.params.id);
     if (!job) return res.status(404).json({ error: 'Job not found' });
 
-    job.applied = !job.applied;
-    await job.save();
+    // Find or create a per-user status record
+    let status = await UserJobStatus.findOne({ userId, jobId: job._id });
+    if (status) {
+      status.applied = !status.applied;
+      status.appliedAt = status.applied ? new Date() : null;
+      await status.save();
+    } else {
+      status = await UserJobStatus.create({ userId, jobId: job._id, applied: true, appliedAt: new Date() });
+    }
 
-    return res.json({ success: true, applied: job.applied });
+    return res.json({ success: true, applied: status.applied });
   } catch (err) {
     console.error('Toggle applied status error:', err);
     return res.status(500).json({ error: err.message });
@@ -451,6 +497,9 @@ export const toggleAppliedStatus = async (req, res) => {
 
 export const setAppliedStatus = async (req, res) => {
   try {
+    const userId = req.user?._id || req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Login required' });
+
     const job = await Job.findById(req.params.id);
     if (!job) return res.status(404).json({ error: 'Job not found' });
 
@@ -458,10 +507,13 @@ export const setAppliedStatus = async (req, res) => {
       return res.status(400).json({ error: 'Boolean applied status is required' });
     }
 
-    job.applied = req.body.applied;
-    await job.save();
+    await UserJobStatus.findOneAndUpdate(
+      { userId, jobId: job._id },
+      { applied: req.body.applied, appliedAt: req.body.applied ? new Date() : null },
+      { upsert: true, new: true }
+    );
 
-    return res.json({ success: true, applied: job.applied });
+    return res.json({ success: true, applied: req.body.applied });
   } catch (err) {
     console.error('Set applied status error:', err);
     return res.status(500).json({ error: err.message });
